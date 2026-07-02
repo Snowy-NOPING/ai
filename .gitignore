@@ -1,0 +1,10 @@
+node_modules/
+dist/
+release/
+src-tauri/target/
+custom-installer/target/
+src-tauri/updater-private.key
+src/assets/fonts/
+*.log
+.env
+.env.*

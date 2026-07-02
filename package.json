@@ -1,0 +1,28 @@
+{
+  "name": "gemma4-chat",
+  "version": "1.0.5",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "release": "powershell -ExecutionPolicy Bypass -File scripts/build-custom-installer.ps1"
+  },
+  "dependencies": {
+    "@lucide/svelte": "^1.22.0",
+    "@tauri-apps/api": "^2.10.0",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
+    "highlight.js": "^11.11.1",
+    "markdown-it": "^14.1.0",
+    "svelte": "^5.38.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.1.0",
+    "@tauri-apps/cli": "^2.8.4",
+    "vite": "^7.0.0"
+  }
+}
