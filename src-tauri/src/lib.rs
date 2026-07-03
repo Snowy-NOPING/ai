@@ -39,6 +39,7 @@ struct Message {
     conversation_id: i64,
     role: String,
     content: String,
+    thinking: String,
     created_at: i64,
 }
 
@@ -61,6 +62,8 @@ struct Settings {
 struct OllamaMessage {
     role: String,
     content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,6 +73,7 @@ struct StreamChatRequest {
     base_url: String,
     model: String,
     messages: Vec<OllamaMessage>,
+    reasoning_effort: String,
     temperature: f64,
     num_ctx: i64,
     num_predict: i64,
@@ -78,6 +82,7 @@ struct StreamChatRequest {
 #[derive(Debug, Serialize, Clone)]
 struct StreamEvent {
     content: String,
+    thinking: String,
     done: bool,
     stopped: bool,
     error: Option<String>,
@@ -194,7 +199,7 @@ fn list_messages(state: State<'_, AppState>, conversation_id: i64) -> Result<Vec
     let mut statement = conn
         .prepare(
             "
-            SELECT id, conversation_id, role, content, created_at
+            SELECT id, conversation_id, role, content, thinking, created_at
             FROM messages
             WHERE conversation_id = ?1
             ORDER BY created_at ASC, id ASC
@@ -215,6 +220,7 @@ fn add_message(
     conversation_id: i64,
     role: String,
     content: String,
+    thinking: Option<String>,
 ) -> Result<Message, String> {
     let conn = state.db.lock().map_err(|err| err.to_string())?;
     let role = role.trim().to_lowercase();
@@ -223,9 +229,13 @@ fn add_message(
     }
 
     let now = now_ms();
+    let thinking = thinking.unwrap_or_default();
     conn.execute(
-        "INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?1, ?2, ?3, ?4)",
-        params![conversation_id, role, content, now],
+        "
+        INSERT INTO messages (conversation_id, role, content, thinking, created_at)
+        VALUES (?1, ?2, ?3, ?4, ?5)
+        ",
+        params![conversation_id, role, content, thinking, now],
     )
     .map_err(|err| err.to_string())?;
 
@@ -337,6 +347,7 @@ async fn stream_ollama_chat(
                 "model": request.model,
                 "messages": request.messages,
                 "stream": true,
+                "think": ollama_think_value(&request.reasoning_effort),
                 "options": {
                     "temperature": request.temperature.clamp(0.0, 2.0),
                     "num_ctx": request.num_ctx.clamp(512, 8192),
@@ -358,7 +369,7 @@ async fn stream_ollama_chat(
         loop {
             tokio::select! {
                 _ = &mut cancel_rx => {
-                    emit_stream_event(&app, &event_name, "", true, true, None)?;
+                    emit_stream_event(&app, &event_name, "", "", true, true, None)?;
                     done_sent = true;
                     break;
                 }
@@ -386,7 +397,7 @@ async fn stream_ollama_chat(
         }
 
         if !done_sent {
-            emit_stream_event(&app, &event_name, "", true, false, None)?;
+            emit_stream_event(&app, &event_name, "", "", true, false, None)?;
         }
 
         Ok(())
@@ -400,7 +411,7 @@ async fn stream_ollama_chat(
         .remove(&request.request_id);
 
     if let Err(error) = &result {
-        let _ = emit_stream_event(&app, &event_name, "", true, false, Some(error.clone()));
+        let _ = emit_stream_event(&app, &event_name, "", "", true, false, Some(error.clone()));
     }
 
     result
@@ -417,15 +428,26 @@ fn process_stream_line(
 
     let line = line.strip_prefix("data:").map(str::trim).unwrap_or(line);
     if line == "[DONE]" {
-        emit_stream_event(app, event_name, "", true, false, None)?;
+        emit_stream_event(app, event_name, "", "", true, false, None)?;
         return Ok(true);
     }
 
     let value: serde_json::Value = serde_json::from_str(line).map_err(|err| err.to_string())?;
 
     if let Some(error) = value.get("error").and_then(|item| item.as_str()) {
-        emit_stream_event(app, event_name, "", true, false, Some(error.to_string()))?;
+        emit_stream_event(app, event_name, "", "", true, false, Some(error.to_string()))?;
         return Ok(true);
+    }
+
+    let thinking = value
+        .get("message")
+        .and_then(|message| message.get("thinking"))
+        .and_then(|thinking| thinking.as_str());
+
+    if let Some(thinking) = thinking {
+        if !thinking.is_empty() {
+            emit_stream_event(app, event_name, "", thinking, false, false, None)?;
+        }
     }
 
     let content = value
@@ -435,7 +457,7 @@ fn process_stream_line(
 
     if let Some(content) = content {
         if !content.is_empty() {
-            emit_stream_event(app, event_name, content, false, false, None)?;
+            emit_stream_event(app, event_name, content, "", false, false, None)?;
         }
     }
 
@@ -446,7 +468,7 @@ fn process_stream_line(
         ;
 
     if done {
-        emit_stream_event(app, event_name, "", true, false, None)?;
+        emit_stream_event(app, event_name, "", "", true, false, None)?;
         return Ok(true);
     }
 
@@ -457,6 +479,7 @@ fn emit_stream_event(
     app: &tauri::AppHandle,
     event_name: &str,
     content: &str,
+    thinking: &str,
     done: bool,
     stopped: bool,
     error: Option<String>,
@@ -465,6 +488,7 @@ fn emit_stream_event(
         event_name,
         StreamEvent {
             content: content.to_string(),
+            thinking: thinking.to_string(),
             done,
             stopped,
             error,
@@ -490,7 +514,8 @@ fn map_message(row: &Row<'_>) -> rusqlite::Result<Message> {
         conversation_id: row.get(1)?,
         role: row.get(2)?,
         content: row.get(3)?,
-        created_at: row.get(4)?,
+        thinking: row.get(4)?,
+        created_at: row.get(5)?,
     })
 }
 
@@ -530,11 +555,22 @@ fn get_conversation_by_id(conn: &Connection, id: i64) -> Result<Conversation, St
 
 fn get_message_by_id(conn: &Connection, id: i64) -> Result<Message, String> {
     conn.query_row(
-        "SELECT id, conversation_id, role, content, created_at FROM messages WHERE id = ?1",
+        "SELECT id, conversation_id, role, content, thinking, created_at FROM messages WHERE id = ?1",
         params![id],
         map_message,
     )
     .map_err(|err| err.to_string())
+}
+
+fn ollama_think_value(reasoning_effort: &str) -> serde_json::Value {
+    match reasoning_effort {
+        "light" => json!("low"),
+        "medium" => json!("medium"),
+        "high" => json!("high"),
+        "extra-high" => json!("max"),
+        "off" => json!(false),
+        _ => json!(true),
+    }
 }
 
 fn read_settings(conn: &Connection) -> Settings {
@@ -649,6 +685,7 @@ fn init_db(conn: &Connection) -> Result<(), String> {
             conversation_id INTEGER NOT NULL,
             role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
             content TEXT NOT NULL,
+            thinking TEXT NOT NULL DEFAULT '',
             created_at INTEGER NOT NULL,
             FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
         );
@@ -665,7 +702,33 @@ fn init_db(conn: &Connection) -> Result<(), String> {
         ON conversations(updated_at DESC);
         ",
     )
-    .map_err(|err| err.to_string())
+    .map_err(|err| err.to_string())?;
+
+    ensure_column(conn, "messages", "thinking", "TEXT NOT NULL DEFAULT ''")?;
+    Ok(())
+}
+
+fn ensure_column(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> Result<(), String> {
+    let mut statement = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(|err| err.to_string())?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|err| err.to_string())?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(|err| err.to_string())?;
+
+    if !columns.iter().any(|name| name == column) {
+        conn.execute(&format!("ALTER TABLE {table} ADD COLUMN {column} {definition}"), [])
+            .map_err(|err| err.to_string())?;
+    }
+
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

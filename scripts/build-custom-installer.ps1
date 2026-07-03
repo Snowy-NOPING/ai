@@ -28,7 +28,7 @@ if (Test-Path -LiteralPath $privateKeyPath) {
 $installerScript = @'
 <script>
 const installer = {
-  name: 'Gemma Local Chat.exe',
+  name: 'AI.exe',
 };
 
 const fillEl = document.getElementById('fill');
@@ -107,7 +107,7 @@ async function runInstaller() {
       markEl.style.display = 'none';
       checkEl.classList.add('show');
       titleEl.textContent = 'Install complete';
-      subtitleEl.textContent = 'Gemma Local Chat is ready';
+      subtitleEl.textContent = 'AI is ready';
       setFile('installed', result.appPath || installer.name);
     }, 500);
   } finally {
@@ -132,6 +132,10 @@ runInstaller().catch((error) => {
 $sourceHtml = Get-Content -LiteralPath $installerHtmlSource -Raw
 $generatedHtml = [regex]::Replace($sourceHtml, '(?s)<script>.*?</script>\s*</body>', "$installerScript`r`n</body>")
 $generatedHtml = $generatedHtml.Replace('.dot{', '.dot{cursor:pointer;')
+$generatedHtml = $generatedHtml.Replace('gemma local chat setup', 'ai setup')
+$generatedHtml = $generatedHtml.Replace('installing gemma local chat', 'installing ai')
+$generatedHtml = $generatedHtml.Replace('Gemma Local Chat.exe', 'AI.exe')
+$generatedHtml = $generatedHtml.Replace('Gemma Local Chat is ready', 'AI is ready')
 Set-Content -LiteralPath $installerHtmlTarget -Value $generatedHtml -Encoding UTF8
 
 npm run tauri build
@@ -151,7 +155,7 @@ if (-not (Test-Path -LiteralPath $customInstallerExe)) {
 New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
 
 Get-ChildItem -LiteralPath $releaseRoot -File -ErrorAction SilentlyContinue |
-  Where-Object { $_.Name -like "Gemma Local Chat_*_x64*" -or $_.Extension -eq ".msi" } |
+  Where-Object { $_.Name -like "Gemma Local Chat_*_x64*" -or $_.Name -like "AI Setup.exe*" -or $_.Extension -eq ".msi" } |
   Remove-Item -Force
 
 foreach ($staleBundle in @("nsis", "msi", "wix")) {
@@ -161,18 +165,21 @@ foreach ($staleBundle in @("nsis", "msi", "wix")) {
   }
 }
 
-Copy-Item -LiteralPath $customInstallerExe -Destination (Join-Path $releaseRoot "Gemma Local Chat Setup.exe") -Force
+Copy-Item -LiteralPath $customInstallerExe -Destination (Join-Path $releaseRoot "AI Setup.exe") -Force
 $webInstallerHtml = (Get-Content -LiteralPath $installerHtmlSource -Raw).Replace(
   "Gemma Local Chat_0.1.0_x64-setup.exe",
-  "Gemma Local Chat Setup.exe"
+  "AI Setup.exe"
 ).Replace(
   "Gemma Local Chat_1.0.0_x64-setup.exe",
-  "Gemma Local Chat Setup.exe"
+  "AI Setup.exe"
+).Replace(
+  "Gemma Local Chat Setup.exe",
+  "AI Setup.exe"
 )
 Set-Content -LiteralPath (Join-Path $releaseRoot "installer.html") -Value $webInstallerHtml -Encoding UTF8
 
-$releaseInstaller = Join-Path $releaseRoot "Gemma Local Chat Setup.exe"
-$releaseSignature = Join-Path $releaseRoot "Gemma Local Chat Setup.exe.sig"
+$releaseInstaller = Join-Path $releaseRoot "AI Setup.exe"
+$releaseSignature = Join-Path $releaseRoot "AI Setup.exe.sig"
 
 if (Test-Path -LiteralPath $privateKeyPath) {
   $signOutput = npx tauri signer sign --password= $releaseInstaller | Out-String
@@ -207,4 +214,4 @@ if (Test-Path -LiteralPath $privateKeyPath) {
 
 Write-Host ""
 Write-Host "custom installer built:"
-Write-Host (Join-Path $releaseRoot "Gemma Local Chat Setup.exe")
+Write-Host (Join-Path $releaseRoot "AI Setup.exe")

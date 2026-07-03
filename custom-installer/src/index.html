@@ -321,7 +321,7 @@ html,body{
 
 <script>
 const installer = {
-  name: 'Gemma Local Chat.exe',
+  name: 'AI.exe',
 };
 
 const fillEl = document.getElementById('fill');
@@ -400,7 +400,7 @@ async function runInstaller() {
       markEl.style.display = 'none';
       checkEl.classList.add('show');
       titleEl.textContent = 'Install complete';
-      subtitleEl.textContent = 'Gemma Local Chat is ready';
+      subtitleEl.textContent = 'AI is ready';
       setFile('installed', result.appPath || installer.name);
     }, 500);
   } finally {

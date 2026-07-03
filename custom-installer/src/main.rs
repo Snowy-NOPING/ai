@@ -15,12 +15,12 @@ use std::os::windows::process::CommandExt;
 use tauri::{Emitter, Manager, Window};
 use winreg::{enums::*, RegKey};
 
-const APP_NAME: &str = "Gemma Local Chat";
-const APP_VERSION: &str = "1.0.5";
-const APP_EXE_NAME: &str = "Gemma Local Chat.exe";
-const UNINSTALL_EXE_NAME: &str = "Uninstall Gemma Local Chat.exe";
+const APP_NAME: &str = "AI";
+const APP_VERSION: &str = "1.0.6";
+const APP_EXE_NAME: &str = "AI.exe";
+const UNINSTALL_EXE_NAME: &str = "Uninstall AI.exe";
 const REGISTRY_KEY: &str =
-    r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Gemma Local Chat";
+    r"Software\Microsoft\Windows\CurrentVersion\Uninstall\AI";
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 const APP_PAYLOAD: &[u8] = include_bytes!(env!("GEMMA_PAYLOAD_EXE"));
@@ -163,7 +163,7 @@ fn install_dir() -> Result<PathBuf, String> {
     let local_app_data = env_path("LOCALAPPDATA")?;
     Ok(local_app_data
         .join("Programs")
-        .join("Gemma Local Chat"))
+        .join("AI"))
 }
 
 fn env_path(name: &str) -> Result<PathBuf, String> {
@@ -183,12 +183,12 @@ fn create_shortcuts(app_path: &Path, install_dir: &Path) -> Result<(), String> {
     fs::create_dir_all(&start_menu).map_err(|err| err.to_string())?;
 
     create_shortcut(
-        &desktop.join("Gemma Local Chat.lnk"),
+        &desktop.join("AI.lnk"),
         app_path,
         install_dir,
     )?;
     create_shortcut(
-        &start_menu.join("Gemma Local Chat.lnk"),
+        &start_menu.join("AI.lnk"),
         app_path,
         install_dir,
     )?;
@@ -289,13 +289,13 @@ fn remove_shortcuts() -> Result<(), String> {
     let paths = [
         env_path("USERPROFILE")?
             .join("Desktop")
-            .join("Gemma Local Chat.lnk"),
+            .join("AI.lnk"),
         env_path("APPDATA")?
             .join("Microsoft")
             .join("Windows")
             .join("Start Menu")
             .join("Programs")
-            .join("Gemma Local Chat.lnk"),
+            .join("AI.lnk"),
     ];
 
     for path in paths {

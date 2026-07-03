@@ -240,6 +240,7 @@
       conversation_id: activeConversation.id,
       role: 'assistant',
       content: '',
+      thinking: '',
       created_at: Date.now(),
       pending: true,
     };
@@ -250,6 +251,15 @@
     try {
       unlisten = await listen(`ollama-chat-${activeRequestId}`, async (event) => {
         const payload = event.payload;
+        if (payload?.thinking) {
+          messages = messages.map((message) =>
+            message.id === pendingMessage.id
+              ? { ...message, thinking: `${message.thinking || ''}${payload.thinking}` }
+              : message
+          );
+          await tick();
+          scrollToBottom();
+        }
         if (payload?.content) {
           assistantContent += payload.content;
           messages = messages.map((message) =>
@@ -269,6 +279,7 @@
           baseUrl: activeBaseUrl(),
           model: settings.model,
           messages: buildOllamaMessages(contextMessages),
+          reasoningEffort: settings.reasoningEffort,
           temperature: Number(settings.temperature),
           numCtx: Number(settings.numCtx),
           numPredict: Number(settings.numPredict),
@@ -279,11 +290,14 @@
     } finally {
       unlisten?.();
       const finalText = assistantContent.trim();
-      if (finalText) {
+      const pendingSnapshot = messages.find((message) => message.id === pendingMessage.id);
+      const finalThinking = (pendingSnapshot?.thinking || '').trim();
+      if (finalText || finalThinking) {
         const savedAssistantMessage = await invoke('add_message', {
           conversationId: activeConversation.id,
           role: 'assistant',
           content: stopped ? `${finalText}\n\n[stopped]` : finalText,
+          thinking: finalThinking,
         });
         messages = messages.map((message) =>
           message.id === pendingMessage.id ? savedAssistantMessage : message
@@ -381,7 +395,11 @@
     const selected = sourceMessages
       .filter((message) => message.role === 'user' || message.role === 'assistant')
       .slice(-Number(settings.maxHistoryMessages || 12))
-      .map((message) => ({ role: message.role, content: message.content }));
+      .map((message) => ({
+        role: message.role,
+        content: message.content,
+        ...(message.role === 'assistant' && message.thinking ? { thinking: message.thinking } : {}),
+      }));
 
     const systemPrompt = settings.systemPrompt?.trim();
     return systemPrompt ? [{ role: 'system', content: systemPrompt }, ...selected] : selected;
@@ -455,29 +473,6 @@
 
   function renderMarkdown(content) {
     return markdown.render(content || '');
-  }
-
-  function splitThoughts(content) {
-    const source = content || '';
-    const thoughts = [];
-    let answer = source;
-    const closedThink = /<think>([\s\S]*?)<\/think>/gi;
-
-    answer = answer.replace(closedThink, (_, thought) => {
-      if (thought.trim()) thoughts.push(thought.trim());
-      return '';
-    });
-
-    const openThink = answer.match(/<think>([\s\S]*)$/i);
-    if (openThink) {
-      if (openThink[1].trim()) thoughts.push(openThink[1].trim());
-      answer = answer.slice(0, openThink.index);
-    }
-
-    return {
-      thoughts: thoughts.join('\n\n'),
-      answer: answer.replace(/<\/?think>/gi, '').trim(),
-    };
   }
 
   function toggleThought(messageId) {
@@ -580,7 +575,7 @@
       <button class="icon-btn" title="toggle sidebar" on:click={() => (sidebarCollapsed = !sidebarCollapsed)}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="9.5" y1="4" x2="9.5" y2="20"/></svg>
       </button>
-      <div class="brand">gemma local</div>
+      <div class="brand">ai</div>
     </div>
 
     <button class="new-chat-btn" on:click={() => createConversation()}>
@@ -682,7 +677,7 @@
         {#if messages.length === 0}
           <div class="empty-state">
             <h1>what are we building today?</h1>
-            <p>local gemma is wired through ollama. keep it short, tweak effort, and chat offline.</p>
+            <p>local ai is wired through ollama. keep it short, tweak effort, and chat offline.</p>
             <div class="suggestion-row">
               <button class="suggestion-chip" on:click={() => sendSuggestion('give me a quick powershell command to check ollama models')}>check ollama models</button>
               <button class="suggestion-chip" on:click={() => sendSuggestion('help me optimize my local model settings for 4 gb vram')}>optimize local settings</button>
@@ -692,22 +687,21 @@
         {/if}
 
         {#each messages as message (message.id)}
-          {@const parsed = splitThoughts(message.content)}
           <div class="msg-row" class:user={message.role === 'user'} class:assistant={message.role === 'assistant'}>
             <div class="msg-body">
-              {#if message.role === 'assistant' && parsed.thoughts}
+              {#if message.role === 'assistant' && message.thinking}
                 <div class="thought-card" class:open={thoughtOpen[message.id]}>
                   <button class="thought-head" on:click={() => toggleThought(message.id)}>
                     <ChevronRight size={14} />
                     thought process
                   </button>
                   {#if thoughtOpen[message.id]}
-                    <div class="thought-body">{parsed.thoughts}</div>
+                    <div class="thought-body">{message.thinking}</div>
                   {/if}
                 </div>
               {/if}
               <div class="msg-text" class:pending={message.pending && !message.content}>
-                {@html message.content ? renderMarkdown(parsed.answer || (parsed.thoughts ? '' : message.content)) : '<div class="typing-dots"><span></span><span></span><span></span></div>'}
+                {@html message.content ? renderMarkdown(message.content) : (message.pending ? '<div class="typing-dots"><span></span><span></span><span></span></div>' : '')}
               </div>
               {#if message.role === 'assistant' && !message.pending}
                 <div class="msg-actions">
@@ -724,7 +718,7 @@
     <form class="composer-wrap" on:submit|preventDefault={sendMessage}>
       <div class="composer">
         <div class="composer-box">
-          <textarea bind:this={composerEl} bind:value={draft} rows="1" placeholder="message gemma..." disabled={isGenerating} on:keydown={handleComposerKeydown}></textarea>
+          <textarea bind:this={composerEl} bind:value={draft} rows="1" placeholder="message ai..." disabled={isGenerating} on:keydown={handleComposerKeydown}></textarea>
           <div class="composer-tools">
             {#if isGenerating}
               <button class="send-btn active" type="button" title="stop" on:click={stopGeneration}><Square size={15} /></button>
