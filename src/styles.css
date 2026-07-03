@@ -341,35 +341,42 @@
 
   .msg-body{ max-width: 100%; min-width:0; }
   .msg-row.user .msg-body{
-    background: rgba(10,132,255,0.16);
-    border:1px solid rgba(10,132,255,0.35);
+    background: #0a84ff;
+    border:1px solid rgba(255,255,255,0.12);
     padding: 10px 14px;
     border-radius: 16px 16px 4px 16px;
     max-width: 70%;
   }
-  .msg-row.assistant .msg-body{ max-width: 100%; }
+  .msg-row.assistant .msg-body{
+    background: #1f8f4d;
+    border:1px solid rgba(255,255,255,0.12);
+    padding: 10px 14px;
+    border-radius: 16px 16px 16px 4px;
+    max-width: 70%;
+  }
 
   .msg-text{
     font-size:15px;
     line-height:1.6;
-    color: var(--text-primary);
+    color: #ffffff;
     white-space:pre-wrap;
     word-wrap:break-word;
   }
-  .msg-row.user .msg-text{ color:#5eb1ff; }
-  .msg-row.assistant .msg-text{ color:#63d471; }
+  .msg-row.user .msg-text,
+  .msg-row.assistant .msg-text{ color:#ffffff; }
   .msg-text p{ margin:0 0 10px 0; }
   .msg-text p:last-child{ margin-bottom:0; }
   .msg-text code{
     font-family: var(--mono);
-    background: var(--bg-input);
+    background: rgba(0,0,0,0.22);
+    color:#ffffff;
     padding: 2px 5px;
     border-radius:4px;
     font-size:13px;
   }
   .msg-text pre{
-    background: var(--bg-input);
-    border:1px solid var(--border);
+    background: rgba(0,0,0,0.24);
+    border:1px solid rgba(255,255,255,0.14);
     border-radius: var(--radius-sm);
     padding: 12px 14px;
     overflow-x:auto;
